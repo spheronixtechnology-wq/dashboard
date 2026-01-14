@@ -3,7 +3,7 @@ import {
   User, Topic, Task, TaskSubmission, Exam, ExamSubmission, UserRole, TaskStatus, AttendanceRecord, ExamCategory, ResearchSubmission, ResearchStatus, Question, MockExam
 } from '../types';
 
-const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:5001/api';
+const API_URL = (import.meta as any).env.VITE_API_URL || '/api';
 
 class ApiClient {
   
