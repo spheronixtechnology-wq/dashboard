@@ -25,7 +25,20 @@ const sendEmail = async (options) => {
       await transporter.sendMail(mailOptions);
       console.log(`✅ Email sent successfully to ${options.email}`);
   } catch (error) {
-      console.error("❌ Email Send Failed:", error);
+      console.error("❌ Email Send Failed:", error.message);
+
+      // FALLBACK FOR DEVELOPMENT: Log the OTP/Message so testing can continue
+      // This allows the user to see the OTP in the console if SMTP fails
+      if (process.env.NODE_ENV === 'development') {
+          console.log("\n==================================================");
+          console.log("⚠️  DEVELOPMENT MODE - EMAIL MOCK  ⚠️");
+          console.log(`TO: ${options.email}`);
+          console.log(`SUBJECT: ${options.subject}`);
+          console.log(`MESSAGE:\n${options.message}`);
+          console.log("==================================================\n");
+          return; // Do not throw, treat as success
+      }
+
       throw new Error("Email could not be sent due to provider error");
   }
 };
