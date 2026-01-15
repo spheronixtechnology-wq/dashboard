@@ -29,7 +29,9 @@ const getExamSubmissions = async (req, res) => {
 // @access  Private (Student)
 const submitExam = async (req, res) => {
   try {
-    const { examId, answers } = req.body;
+    console.log("[POST /exam-submissions] Payload:", req.body); // Debug Log
+
+    const { examId, answers = {} } = req.body; // Default answers to empty object
     const studentId = req.user.id;
 
     if (!examId) {
@@ -51,19 +53,27 @@ const submitExam = async (req, res) => {
     let score = 0;
     let isGraded = false;
 
-    // Optimized auto-grading
+    // Optimized auto-grading (Restored)
     if (exam.questions && Array.isArray(exam.questions)) {
         exam.questions.forEach(q => {
             const studentAns = answers[q.id];
             
-            if (q.type === 'MCQ' && q.correctAnswer === studentAns) {
-                score += (q.maxMarks || 0);
+            // Log for debugging
+            console.log(`[Grading] QID: ${q.id} | Type: ${q.type} | Correct: '${q.correctAnswer}' | Student: '${studentAns}' | MaxMarks: ${q.maxMarks}`);
+
+            if (q.type === 'MCQ') {
+                const correct = q.correctAnswer ? String(q.correctAnswer).trim() : '';
+                const student = studentAns ? String(studentAns).trim() : '';
+                
+                if (correct === student) {
+                    score += (q.maxMarks || 1); // Default to 1 mark if undefined
+                }
             }
-            // Basic heuristic for coding - just checking length is risky but keeping existing logic for now
-            // Added check for undefined to avoid crash
-            if (q.type === 'CODING' && studentAns) {
+            
+            // Basic heuristic for coding
+            if (q.type === 'CODING' && studentAns && typeof studentAns === 'string') {
                 if (studentAns.length > 20 && !studentAns.includes('// Write your')) {
-                    score += (q.maxMarks || 0);
+                    score += (q.maxMarks || 1);
                 }
             }
         });

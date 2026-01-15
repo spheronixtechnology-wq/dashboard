@@ -27,6 +27,11 @@ const sendEmail = async (options) => {
   } catch (error) {
       console.error("❌ Email Send Failed:", error.message);
 
+      if (error.code === 'EAUTH') {
+          console.error("💡 TIP: If using Gmail, make sure you are using an App Password, not your login password.");
+          console.error("   Generate one at: https://myaccount.google.com/apppasswords");
+      }
+
       // FALLBACK FOR DEVELOPMENT: Log the OTP/Message so testing can continue
       // This allows the user to see the OTP in the console if SMTP fails
       if (process.env.NODE_ENV === 'development') {
@@ -36,6 +41,18 @@ const sendEmail = async (options) => {
           console.log(`SUBJECT: ${options.subject}`);
           console.log(`MESSAGE:\n${options.message}`);
           console.log("==================================================\n");
+          
+          // Write OTP to file for automation scripts
+          const otpMatch = options.message.match(/(\d{6})/);
+          if (otpMatch) {
+              const fs = require('fs');
+              const path = require('path');
+              // Use absolute path relative to the project root or backend folder
+              const otpPath = path.resolve(__dirname, '..', 'otp.tmp');
+              fs.writeFileSync(otpPath, otpMatch[1]);
+              console.log(`[TEST DEBUG] OTP Written to ${otpPath}`);
+          }
+
           return; // Do not throw, treat as success
       }
 

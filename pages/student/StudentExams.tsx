@@ -13,23 +13,40 @@ export const StudentExams: React.FC<{ user: User }> = ({ user }) => {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [timeLeft, setTimeLeft] = useState(0);
   const [viewingResultExam, setViewingResultExam] = useState<Exam | null>(null);
+  const [viewingSubmission, setViewingSubmission] = useState<ExamSubmission | null>(null);
 
-  const fetchExams = async () => {
-    try {
-        // Only fetch official Exams
-        const data = await api.getExams(ExamCategory.EXAM, UserRole.STUDENT);
-        console.log("Student fetched exams:", data);
+  // Look for this block near the top of the StudentExams component
+const fetchExams = async () => {
+  try {
+    const data = await api.getExams(ExamCategory.EXAM, UserRole.STUDENT);
+    const results = await api.getExamResults(user.id);
+    const subMap: Record<string, ExamSubmission> = {};
+    
+    // Explicitly cast 'r' to any to avoid the '_id' does not exist error
+      results.forEach((r: any) => {
+        // Robustly find the exam ID
+        let key = r.examId;
         
-        const results = await api.getExamResults(user.id);
-        const subMap: Record<string, ExamSubmission> = {};
-        results.forEach(r => subMap[r.examId] = r);
+        // Handle case where examId might be an object (populated)
+        if (typeof key === 'object' && key !== null) {
+             key = key._id || key.id || key.toString();
+        }
         
-        setExams(Array.isArray(data) ? data : []);
-        setSubmissions(subMap);
-    } catch (error) {
-        console.error("Student failed to fetch exams:", error);
-    }
-  };
+        // Fallback to submission ID if no examId found (rare)
+        if (!key) key = r._id || r.id;
+        
+        if (key) {
+            // Ensure key is a string
+            subMap[String(key)] = r;
+        }
+      });
+    
+    setExams(Array.isArray(data) ? data : []);
+    setSubmissions(subMap);
+  } catch (error) {
+    console.error("Student failed to fetch exams:", error);
+  }
+};
 
   useEffect(() => {
     fetchExams();
@@ -51,53 +68,114 @@ export const StudentExams: React.FC<{ user: User }> = ({ user }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeExam]);
 
-  const startExam = (exam: Exam) => {
+const startExam = async (exam: Exam) => {
+    // 1. Double-check if the user has already submitted this exam
+    // We check both .id and ._id to match your fetchExams logic
+    const hasSubmittedLocal = submissions[exam.id] || submissions[(exam as any)._id] || (exam as any).hasSubmitted;
+    
+    if (hasSubmittedLocal) {
+      alert("You have already submitted this exam. Please view your results from the dashboard.");
+      return;
+    }
+
+    // 1b. Server-side check (Prevent Bypass)
+    try {
+        const check = await api.checkExamStatus(exam.id || (exam as any)._id);
+        if (check.hasSubmitted) {
+            alert("You have already submitted this exam. Please refresh the page.");
+            fetchExams(); // Refresh to update UI
+            return;
+        }
+    } catch (e) {
+        console.error("Failed to check exam status", e);
+        // Fallback: If check fails (network), rely on local state or block?
+        // Let's allow proceed if network error but log it, or block safe?
+        // Blocking safe is better.
+        alert("Could not verify exam status. Please try again.");
+        return;
+    }
+
+    // 2. Set the active exam and timer
     setActiveExam(exam);
     setTimeLeft(exam.durationMinutes * 60);
-    const initialAnswers: Record<string, string> = {};
-    exam.questions.forEach(q => {
-        if (q.type === ExamType.CODING) {
-            initialAnswers[q.id] = q.codeLanguage === 'javascript' 
-              ? `// Solution for: ${q.text.substring(0, 30)}...\n\nfunction solution() {\n  // Write your code here\n  console.log("Hello");\n}\n\nsolution();`
-              : q.codeLanguage === 'python'
-              ? `# Solution for: ${q.text.substring(0, 30)}...\n\ndef solution():\n    # Write your code here\n    print("Hello")\n\nsolution()`
-              : `// Write your ${q.codeLanguage} code here...`;
-        }
-    });
-    setAnswers(initialAnswers);
-  };
+
+  // 3. Initialize answers (MCQ/Descriptive start empty, Coding starts with templates)
+  const initialAnswers: Record<string, string> = {};
+  exam.questions.forEach(q => {
+    if (q.type === ExamType.CODING) {
+      initialAnswers[q.id] = q.codeLanguage === 'javascript' 
+        ? `// Solution for: ${q.text.substring(0, 30)}...\n\nfunction solution() {\n  // Write your code here\n  console.log("Hello");\n}\n\nsolution();`
+        : q.codeLanguage === 'python'
+        ? `# Solution for: ${q.text.substring(0, 30)}...\n\ndef solution():\n    # Write your code here\n    print("Hello")\n\nsolution()`
+        : `// Write your ${q.codeLanguage} code here...`;
+    }
+  });
+  
+  setAnswers(initialAnswers);
+};
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const submitExam = async () => {
-    if (!activeExam || isSubmitting) return;
-    setIsSubmitting(true);
-    try {
-      const submission = await api.submitExam({
-        examId: activeExam.id,
+  // Inside StudentExams.tsx
+const submitExam = async () => {
+  if (!activeExam || isSubmitting) return;
+  
+  // Capture the exam being submitted before we clear activeExam
+  const currentExam = activeExam;
+  
+  setIsSubmitting(true);
+  try {
+    const payload = {
+        examId: activeExam.id || (activeExam as any)._id,
         studentId: user.id,
         answers: answers,
-      });
-      await fetchExams();
-      const examToCheck = activeExam;
-      setActiveExam(null);
-      
-      // If fully graded (no pending descriptive), show results immediately
-      // Otherwise just show the list with "Pending Review" status
-      if (submission.isGraded) {
-        setViewingResultExam(examToCheck);
-      } else {
-        // Just return to list, toast is handled below/implied by UI update
-      }
-    } catch (e: any) {
-      console.error("Exam submission failed:", e);
-      alert(`Error submitting exam: ${e.message || 'Unknown error'}`);
-    } finally {
-      setIsSubmitting(false);
+    };
+    console.log("Submitting Exam Payload:", payload); // Debug Log
+
+    const submission = await api.submitExam(payload);
+    
+    // 1. IMMEDIATE OPTIMISTIC UPDATE
+    // Update local state immediately so we don't need to wait for fetchExams
+    setSubmissions(prev => ({
+      ...prev,
+      [activeExam.id]: submission,
+      [activeExam.id || '']: submission
+    }));
+
+    // 2. IMMEDIATE UI TRANSITION
+    // Transition to results view using the direct submission response
+    if (currentExam) {
+      // Set submission FIRST to ensure it's ready when the view switches
+      setViewingSubmission(submission);
+      setViewingResultExam(currentExam);
     }
-  };
+    
+    // Clear active exam LAST
+    setActiveExam(null);
+
+    // 3. BACKGROUND SYNC
+    // Fetch latest data in background without blocking the UI
+    fetchExams().catch(err => console.error("Background fetch failed:", err));
+    
+  } catch (e: any) {
+    console.error("Exam submission failed:", e);
+    const message = e.response?.data?.message || "Error submitting";
+    alert(message);
+
+    // CRITICAL: Reset state on error so user isn't stuck
+    if (message.includes("already submitted")) {
+      setActiveExam(null);
+      fetchExams();
+    }
+  } finally {
+    // THIS ENSURES THE BUTTON STOPS SPINNING
+    setIsSubmitting(false); 
+  }
+};
 
   const openResults = (exam: Exam) => {
+    const sub = submissions[exam.id] || submissions[(exam as any)._id];
+    setViewingSubmission(sub);
     setViewingResultExam(exam);
   };
 
@@ -200,12 +278,27 @@ export const StudentExams: React.FC<{ user: User }> = ({ user }) => {
 
   // Render: View Results Interface
   if (viewingResultExam) {
-    const submission = submissions[viewingResultExam.id];
-    if (!submission) return <div className="p-8 text-center text-gray-500 animate-pulse">Loading Results...</div>;
+    const submission = viewingSubmission || submissions[viewingResultExam.id] || submissions[(viewingResultExam as any)._id];
+    
+    // Robust Loading State
+    if (!submission) {
+        return (
+            <div className="w-full min-h-screen bg-[#0d1117] flex flex-col items-center justify-center space-y-4">
+                <div className="w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
+                <p className="text-gray-400 font-medium animate-pulse">Processing Results...</p>
+                <button 
+                    onClick={() => setViewingResultExam(null)}
+                    className="mt-8 text-sm text-red-400 hover:text-red-300 underline"
+                >
+                    Cancel & Return to Dashboard
+                </button>
+            </div>
+        );
+    }
 
     return (
-      <div className="fixed inset-0 z-50 bg-[#0d1117] overflow-y-auto">
-         <div className="w-full min-h-screen flex flex-col">
+      <div className="w-full min-h-screen bg-[#0d1117]">
+         <div className="w-full flex flex-col">
             {/* Header */}
             <div className="sticky top-0 z-30 bg-[#0d1117]/95 backdrop-blur-xl border-b border-white/10 px-6 py-4 flex justify-between items-center shadow-lg">
                 <div className="flex items-center gap-4">
@@ -215,7 +308,7 @@ export const StudentExams: React.FC<{ user: User }> = ({ user }) => {
                    </span>
                 </div>
                 <button 
-                  onClick={() => setViewingResultExam(null)}
+                  onClick={() => { setViewingResultExam(null); setViewingSubmission(null); fetchExams(); }}
                   className="px-6 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-gray-300 hover:text-white transition-all font-medium flex items-center"
                 >
                   <X className="w-4 h-4 mr-2" /> Close
@@ -258,7 +351,7 @@ export const StudentExams: React.FC<{ user: User }> = ({ user }) => {
                 {/* Right: Questions List */}
                 <div className="lg:col-span-9 space-y-6">
                     {viewingResultExam.questions.map((q, idx) => {
-                      const userAnswer = submission.answers[q.id];
+                      const userAnswer = submission.answers?.[q.id];
                       const isCorrect = q.type === ExamType.MCQ && userAnswer === q.correctAnswer;
                       
                       return (
@@ -345,94 +438,124 @@ export const StudentExams: React.FC<{ user: User }> = ({ user }) => {
   }
 
   // Render: Dashboard View
-  return (
-    <div className="space-y-8">
-      <h1 className="text-3xl font-bold text-white">Examinations</h1>
+  // Helper to check submission status
+  const checkIsSubmitted = (exam: Exam) => {
+      const submission = submissions[exam.id] || submissions[(exam as any)._id];
+      return (exam as any).hasSubmitted || (exam as any).isSubmitted || !!submission;
+  };
+
+  const pendingExams = exams.filter(e => !checkIsSubmitted(e));
+  const completedExams = exams.filter(e => checkIsSubmitted(e));
+
+  const ExamCard = ({ exam, isCompletedList }: { exam: Exam, isCompletedList: boolean }) => {
+      const submission = submissions[exam.id] || submissions[(exam as any)._id];
+      const isSubmitted = checkIsSubmitted(exam);
+      const score = (exam as any).score !== undefined ? (exam as any).score : (submission?.score);
       
-      <div className="grid gap-6">
-        {exams.length === 0 ? (
-            <div className="col-span-full glass-card p-8 text-center text-gray-500 border-dashed border-white/10">
-                No active examinations scheduled.
+      const now = new Date();
+      const start = new Date(exam.startTime);
+      const end = new Date(exam.endTime);
+      
+      let status = 'Upcoming';
+      if (isSubmitted) {
+        status = 'Completed';
+      }
+      else if (now > end) status = 'Closed';
+      else if (now >= start && now <= end) status = 'Active';
+
+      return (
+        <div className="glass-panel p-6 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-6 hover:border-white/20 transition-all group">
+          <div>
+            <div className="flex items-center gap-3 mb-3">
+               <h3 className="text-xl font-bold text-white group-hover:text-cyan-300 transition-colors">{exam.title}</h3>
+               <span className={`px-2 py-1 text-xs rounded-md font-bold uppercase tracking-wide border ${
+                  status === 'Active' ? 'bg-green-500/20 text-green-300 border-green-500/30 animate-pulse' :
+                  status === 'Completed' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' :
+                  status === 'Pending Review' ? 'bg-orange-500/20 text-orange-300 border-orange-500/30' :
+                  status === 'Closed' ? 'bg-gray-500/20 text-gray-400 border-gray-500/30' :
+                  'bg-yellow-500/20 text-yellow-300 border-yellow-500/30'
+               }`}>
+                 {status}
+               </span>
             </div>
-        ) : exams.map(exam => {
-          const submission = submissions[exam.id];
-          const now = new Date();
-          const start = new Date(exam.startTime);
-          const end = new Date(exam.endTime);
-          
-          let status = 'Upcoming';
-          if (submission) {
-            status = submission.isGraded ? 'Completed' : 'Pending Review';
-          }
-          else if (now > end) status = 'Closed';
-          else if (now >= start && now <= end) status = 'Active';
-
-          return (
-            <div key={exam.id} className="glass-panel p-6 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-6 hover:border-white/20 transition-all group">
-              <div>
-                <div className="flex items-center gap-3 mb-3">
-                   <h3 className="text-xl font-bold text-white group-hover:text-cyan-300 transition-colors">{exam.title}</h3>
-                   <span className={`px-2 py-1 text-xs rounded-md font-bold uppercase tracking-wide border ${
-                      status === 'Active' ? 'bg-green-500/20 text-green-300 border-green-500/30 animate-pulse' :
-                      status === 'Completed' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' :
-                      status === 'Pending Review' ? 'bg-orange-500/20 text-orange-300 border-orange-500/30' :
-                      status === 'Closed' ? 'bg-gray-500/20 text-gray-400 border-gray-500/30' :
-                      'bg-yellow-500/20 text-yellow-300 border-yellow-500/30'
-                   }`}>
-                     {status}
-                   </span>
-                </div>
-                <p className="text-gray-400 text-sm mb-3">{exam.description}</p>
-                <div className="flex items-center text-xs text-gray-500 gap-4">
-                   <span className="flex items-center bg-black/20 px-2 py-1 rounded"><Clock className="w-3 h-3 mr-1"/> {exam.durationMinutes} mins</span>
-                   <span className="flex items-center bg-black/20 px-2 py-1 rounded">End: {end.toLocaleDateString()} {end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-4">
-                 {(status === 'Completed' || status === 'Pending Review') && submission && (
-                   <div className="flex items-center gap-4">
-                     <div className="text-right">
-                       <p className="text-xs text-gray-500 uppercase">Score</p>
-                       <p className="text-2xl font-bold text-cyan-400">
-                          {submission.isGraded ? submission.score : <span className="text-gray-600 text-base">Pending</span>}
-                       </p>
-                     </div>
-                     <button 
-                        onClick={() => openResults(exam)}
-                        className="glass-card border border-white/10 text-cyan-300 hover:bg-cyan-500/10 hover:border-cyan-500/30 px-5 py-2.5 rounded-xl text-sm font-medium flex items-center transition-all"
-                     >
-                        <Eye className="w-4 h-4 mr-2" />
-                        {submission.isGraded ? 'View Results' : 'View Submission'}
-                     </button>
-                   </div>
-                 )}
-                 
-                 {status === 'Active' && (
-                   <button 
-                     onClick={() => startExam(exam)}
-                     className="flex items-center px-8 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 text-white rounded-xl hover:from-cyan-500 hover:to-blue-500 shadow-lg shadow-cyan-500/20 transition-all font-semibold transform hover:-translate-y-0.5"
-                   >
-                     <PlayCircle className="w-5 h-5 mr-2" />
-                     Start Exam
-                   </button>
-                 )}
-
-                 {status === 'Upcoming' && (
-                    <button disabled className="px-6 py-2 bg-white/5 text-gray-500 border border-white/5 rounded-xl cursor-not-allowed">
-                       Not Started
-                    </button>
-                 )}
-                 
-                 {status === 'Closed' && !submission && (
-                    <div className="text-red-400 flex items-center text-sm font-medium bg-red-500/10 px-4 py-2 rounded-lg border border-red-500/20">
-                       <AlertTriangle className="w-4 h-4 mr-2" /> Missed
-                    </div>
-                 )}
-              </div>
+            <p className="text-gray-400 text-sm mb-3">{exam.description}</p>
+            <div className="flex items-center text-xs text-gray-500 gap-4">
+               <span className="flex items-center bg-black/20 px-2 py-1 rounded"><Clock className="w-3 h-3 mr-1"/> {exam.durationMinutes} mins</span>
+               <span className="flex items-center bg-black/20 px-2 py-1 rounded">End: {end.toLocaleDateString()} {end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
             </div>
-          );
-        })}
+          </div>
+
+          <div className="flex items-center gap-4">
+             {isCompletedList && (
+               <div className="flex items-center gap-4">
+                 <div className="text-right">
+                   <p className="text-xs text-gray-500 uppercase">Score</p>
+                   <p className="text-2xl font-bold text-cyan-400">
+                      {score !== undefined ? score : <span className="text-gray-600 text-base">Pending</span>}
+                   </p>
+                 </div>
+                 <button 
+                    onClick={() => openResults(exam)}
+                    className="glass-card border border-white/10 text-cyan-300 hover:bg-cyan-500/10 hover:border-cyan-500/30 px-5 py-2.5 rounded-xl text-sm font-medium flex items-center transition-all"
+                 >
+                    <Eye className="w-4 h-4 mr-2" />
+                    View Results
+                 </button>
+               </div>
+             )}
+             
+             {!isCompletedList && status === 'Active' && (
+               <button 
+                 onClick={() => startExam(exam)}
+                 className="flex items-center px-8 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 text-white rounded-xl hover:from-cyan-500 hover:to-blue-500 shadow-lg shadow-cyan-500/20 transition-all font-semibold transform hover:-translate-y-0.5"
+               >
+                 <PlayCircle className="w-5 h-5 mr-2" />
+                 Start Exam
+               </button>
+             )}
+
+             {!isCompletedList && status === 'Upcoming' && (
+                <button disabled className="px-6 py-2 bg-white/5 text-gray-500 border border-white/5 rounded-xl cursor-not-allowed">
+                   Not Started
+                </button>
+             )}
+             
+             {!isCompletedList && status === 'Closed' && (
+                <div className="text-red-400 flex items-center text-sm font-medium bg-red-500/10 px-4 py-2 rounded-lg border border-red-500/20">
+                   <AlertTriangle className="w-4 h-4 mr-2" /> Missed
+                </div>
+             )}
+          </div>
+        </div>
+      );
+  };
+
+  return (
+    <div className="space-y-12">
+      <div>
+          <h1 className="text-3xl font-bold text-white mb-6">Pending Exams</h1>
+          <div className="grid gap-6">
+            {pendingExams.length === 0 ? (
+                <div className="glass-card p-8 text-center text-gray-500 border-dashed border-white/10 rounded-2xl">
+                    No pending examinations.
+                </div>
+            ) : pendingExams.map(exam => (
+                <ExamCard key={exam.id} exam={exam} isCompletedList={false} />
+            ))}
+          </div>
+      </div>
+
+      <div>
+          <h1 className="text-3xl font-bold text-white mb-6">Completed Exams</h1>
+          <div className="grid gap-6">
+            {completedExams.length === 0 ? (
+                <div className="glass-card p-8 text-center text-gray-500 border-dashed border-white/10 rounded-2xl">
+                    No completed examinations yet.
+                </div>
+            ) : completedExams.map(exam => (
+                <ExamCard key={exam.id} exam={exam} isCompletedList={true} />
+            ))}
+          </div>
       </div>
     </div>
   );

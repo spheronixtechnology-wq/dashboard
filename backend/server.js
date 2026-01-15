@@ -30,26 +30,26 @@ app.use(
       // Allow server-to-server / curl / postman
       if (!origin) return callback(null, true);
 
-      // Allow localhost during development
-      if (
-        NODE_ENV !== "production" &&
-        (origin.startsWith("http://localhost") ||
-          origin.startsWith("http://127.0.0.1"))
-      ) {
+      const frontendUrl = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.trim().replace(/\/$/, "") : "";
+      const allowed = [
+        frontendUrl,
+        "https://dashboard.spheronixtechnology.com",
+        "http://localhost:5173",
+        "http://localhost:3000"
+      ].filter(Boolean);
+
+      // Check exact match for production domains
+      if (allowed.includes(origin)) {
         return callback(null, true);
       }
-
-      // Allow frontend domain in production
-      if (NODE_ENV === "production" && process.env.FRONTEND_URL) {
-        if (origin === process.env.FRONTEND_URL) {
-          return callback(null, true);
-        }
+      
+      // Allow localhost for development flexibility
+      if (origin.startsWith("http://localhost:") || origin.startsWith("http://127.0.0.1:")) {
+         return callback(null, true);
       }
 
-      return callback(
-        new Error(`CORS blocked for origin: ${origin}`),
-        false
-      );
+      console.error(`[CORS BLOCKED] Origin: ${origin} is not allowed.`);
+      return callback(new Error(`CORS blocked for origin: ${origin}`), false);
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -78,13 +78,16 @@ if (NODE_ENV !== "production") {
  * ================================
  */
 app.get("/api/health", (req, res) => {
+  const mongoose = require("mongoose");
+  const dbStatus = mongoose.connection.readyState === 1 ? "Connected" : "Disconnected";
+
   res.status(200).json({
     success: true,
     status: "Backend is running",
+    database: dbStatus, // This confirms the DB connection
     environment: NODE_ENV,
   });
 });
-
 /**
  * ================================
  * Routes

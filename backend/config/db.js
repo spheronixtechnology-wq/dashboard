@@ -16,7 +16,7 @@ const connectDB = async () => {
         family: 4
     });
 
-    console.log(`✅ MongoDB Connected Successfully: ${conn.connection.host}`);
+    console.log(`✅ MongoDB Atlas Connected Successfully: ${conn.connection.host}`);
     console.log(`🗄️ MongoDB Database Name: ${conn.connection.name}`);
     return conn;
   } catch (error) {

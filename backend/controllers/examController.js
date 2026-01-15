@@ -9,19 +9,55 @@ const getExams = async (req, res) => {
     const { category } = req.query;
     let query = category ? { category } : {};
     
-    // If Student, only show PUBLISHED exams
     if (req.user.role === 'STUDENT') {
         query.status = 'PUBLISHED';
     }
 
-    console.log(`[GET /exams] Fetching exams for user: ${req.user.id} (${req.user.role}) with query:`, query);
-
+    // 1. Fetch the exams
     const exams = await Exam.find(query).sort({ createdAt: -1 });
-    console.log(`[GET /exams] Found ${exams.length} exams`);
+
+    // 2. If it's a student, find which exams they have already submitted
+    if (req.user.role === 'STUDENT') {
+        const studentResults = await Result.find({ studentId: req.user.id });
+
+        // Attach an 'isSubmitted' flag and score to each exam object
+        const examsWithStatus = exams.map(exam => {
+            const examObj = exam.toObject();
+            const result = studentResults.find(r => r.examId.toString() === exam._id.toString());
+            
+            examObj.hasSubmitted = !!result; // Changed from isSubmitted to hasSubmitted
+            if (result) {
+                examObj.score = result.score;
+            }
+            return examObj;
+        });
+
+        return res.status(200).json({ success: true, data: examsWithStatus });
+    }
     
     res.status(200).json({ success: true, data: exams });
   } catch (error) {
     console.error('[GET /exams] Error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Check if student has submitted an exam
+// @route   GET /api/exams/:id/status
+// @access  Private (Student)
+const checkExamStatus = async (req, res) => {
+  try {
+    const examId = req.params.id;
+    const studentId = req.user.id;
+
+    const result = await Result.findOne({ examId, studentId });
+    
+    res.status(200).json({ 
+        success: true, 
+        hasSubmitted: !!result 
+    });
+  } catch (error) {
+    console.error('[GET /exams/:id/status] Error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -101,9 +137,60 @@ const updateExam = async (req, res) => {
   }
 };
 
+// @desc    Submit exam answers
+// @route   POST /api/exams/submit
+// @access  Private (Student)
+const submitExam = async (req, res) => {
+  try {
+    const { examId, answers } = req.body;
+    const studentId = req.user.id;
+
+    // 1. Check if already submitted
+    const existingResult = await Result.findOne({ examId, studentId });
+    if (existingResult) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Exam already submitted' 
+      });
+    }
+
+    // 2. Fetch the exam to calculate score
+    const exam = await Exam.findById(examId);
+    if (!exam) {
+      return res.status(404).json({ success: false, message: 'Exam not found' });
+    }
+
+    // 3. Simple Scoring Logic (Adjust based on your question structure)
+    let score = 0;
+    exam.questions.forEach((question, index) => {
+      if (answers[index] === question.correctAnswer) {
+        score += question.marks || 1;
+      }
+    });
+
+    // 4. Create the Result
+    const result = await Result.create({
+      examId,
+      studentId,
+      answers,
+      score,
+      totalMarks: exam.totalMarks,
+      status: 'COMPLETED',
+      submittedAt: Date.now()
+    });
+
+    res.status(201).json({ success: true, data: result });
+  } catch (error) {
+    console.error('[POST /exams/submit] Error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
   getExams,
   createExam,
   deleteExam,
-  updateExam
+  updateExam,
+  submitExam,
+  checkExamStatus
 };

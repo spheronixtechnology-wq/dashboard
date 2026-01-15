@@ -9,6 +9,10 @@ class ApiClient {
   
   private async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
     const token = localStorage.getItem('token');
+    
+    // Debug Log
+    console.log('TOKEN:', token);
+
     const headers: HeadersInit = { 
         'Content-Type': 'application/json' 
     };
@@ -25,6 +29,15 @@ class ApiClient {
       
       if (!res.ok) {
         const error = await res.json().catch(() => ({}));
+        
+        // Handle 401 User Not Found (Stale Token)
+        if (res.status === 401 && (error.message === 'Not authorized, user not found' || error.message === 'Not authorized, token failed')) {
+            console.warn("Session expired or user not found. Redirecting to login.");
+            localStorage.removeItem('token');
+            window.location.href = '/#/login'; // Force redirect
+            throw new Error("Session expired. Please login again.");
+        }
+
         throw new Error(error.message || `Request failed: ${res.statusText}`);
       }
       
@@ -197,6 +210,10 @@ class ApiClient {
     const query = params.toString() ? `?${params.toString()}` : '';
     const data = await this.request<Exam[]>(`/exams${query}`);
     return data || [];
+  }
+
+  async checkExamStatus(examId: string): Promise<{ success: boolean; hasSubmitted: boolean }> {
+    return this.request<{ success: boolean; hasSubmitted: boolean }>(`/exams/${examId}/status`);
   }
 
   async createExam(exam: Omit<Exam, 'id'>): Promise<Exam> {

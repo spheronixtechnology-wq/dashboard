@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const Attendance = require('../models/Attendance');
+const PendingUser = require('../models/PendingUser');
 const sendEmail = require('../utils/sendEmail');
 
 // Generate JWT
@@ -11,42 +12,54 @@ const generateToken = (id) => {
   });
 };
 
-const PendingUser = require('../models/PendingUser');
-
 // @desc    Register new user
 // @route   POST /api/auth/register
 // @access  Public
 const registerUser = async (req, res) => {
-  let { name, username, email, password, role } = req.body;
+  try {
+    let { name, username, email, password, role } = req.body;
 
-  // Normalize inputs
-  if (email) email = email.toLowerCase().trim();
-  if (username) username = username.toLowerCase().trim();
+    // Normalize inputs
+    if (email) email = email.toLowerCase().trim();
+    if (username) username = username.toLowerCase().trim();
 
-  if (!name || !email || !password || !username) {
-    return res.status(400).json({ success: false, message: 'Please add all fields' });
-  }
+    if (!name || !email || !password || !username) {
+      return res.status(400).json({ success: false, message: 'Please add all fields' });
+    }
 
-  // Check if user exists
-  const userExists = await User.findOne({ $or: [{ email }, { username }] });
+    // 1. Check verified users first
+    // This is the ONLY condition that should return 409 "Account already exists"
+    const userExists = await User.findOne({ $or: [{ email }, { username }] });
+      if (userExists) {
+      const field = userExists.email === email ? 'Email' : 'Username';
+      return res.status(409).json({ 
+      success: false, 
+      message: `${field} is already registered. Please login or use a different ${field.toLowerCase()}.` 
+     });
+    }
+    // 2. Handle PendingUser
+    // If email OR username exists in PendingUser, DELETE it.
+    // This ensures we never get a unique constraint error from PendingUser collection,
+    // and it guarantees that unverified (stale) accounts do not block new signups.
+    await PendingUser.deleteMany({ $or: [{ email }, { username }] });
 
-  if (userExists) {
-    return res.status(400).json({ success: false, message: 'User already exists' });
-  }
+    // 3. Generate OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-  // Generate OTP for Email Verification
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    // 4. Create fresh PendingUser
+    await PendingUser.create({
+      name,
+      username,
+      email,
+      password, // Plain text, will be hashed when moved to User model
+      role: role || 'STUDENT',
+      otp,
+      otpExpiry
+    });
 
-  // Store in PendingUser
-  await PendingUser.findOneAndUpdate(
-    { email }, // Find by email
-    { name, username, email, password, role: role || 'STUDENT', otp, otpExpiry }, // Update or Insert
-    { upsert: true, new: true, setDefaultsOnInsert: true }
-  );
-
-  // Send Verification Email
-  const message = `
+    // 5. Send Verification Email
+    const message = `
 Hello ${name},
 
 Thank you for signing up with Spheronix Technology.
@@ -64,24 +77,31 @@ Regards,
 Spheronix Technology 
   `;
 
-  try {
+    try {
       await sendEmail({
-          email: email,
-          subject: 'Verify your Spheronix Account',
-          message: message,
+        email: email,
+        subject: 'Verify your Spheronix Account',
+        message: message,
       });
-      
+
       console.log(`[AUTH] Verification OTP sent to ${email}`);
 
       res.status(200).json({ 
-          success: true, 
-          message: 'Verification code sent to email',
-          requiresVerification: true,
-          email: email 
+        success: true, 
+        message: 'Verification code sent to email',
+        requiresVerification: true,
+        email: email 
       });
-  } catch (error) {
+    } catch (error) {
       console.error("Email send error:", error);
+      // In development, we might have fallen back to logging the OTP, so we don't necessarily want to fail here if sendEmail handled it.
+      // But if sendEmail throws, we return 500.
       return res.status(500).json({ success: false, message: 'Could not send verification email. Please try again.' });
+    }
+
+  } catch (error) {
+    console.error("Register Error:", error);
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -230,7 +250,8 @@ const getStudents = async (req, res) => {
 // @route   POST /api/auth/forgot-password
 // @access  Public
 const forgotPassword = async (req, res) => {
-  const { email } = req.body;
+  let { email } = req.body;
+  if (email) email = email.toLowerCase().trim();
 
   try {
     const user = await User.findOne({ email });
@@ -354,13 +375,47 @@ const resetPassword = async (req, res) => {
   }
 };
 
+// @desc    Change Password (Authenticated)
+// @route   PUT /api/auth/change-password
+// @access  Private
+const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const user = await User.findById(req.user.id);
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    // Check current password
+    const isMatch = await user.matchPassword(currentPassword);
+    if (!isMatch) {
+      return res.status(401).json({ success: false, message: 'Incorrect current password' });
+    }
+
+    // Validate new password strength
+    const strongPassword = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+    if (!strongPassword.test(newPassword)) {
+        return res.status(400).json({ success: false, message: 'Password must be at least 8 characters with 1 uppercase, 1 number, and 1 special char.' });
+    }
+
+    user.password = newPassword; // Will be hashed by pre-save hook
+    await user.save();
+
+    res.status(200).json({ success: true, message: 'Password updated successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
   registerUser,
-  verifySignup, // Added verifySignup
+  verifySignup,
   loginUser,
   getMe,
   getStudents,
   forgotPassword,
   verifyResetCode,
-  resetPassword
+  resetPassword,
+  changePassword // Added changePassword
 };

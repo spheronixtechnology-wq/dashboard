@@ -8,22 +8,24 @@ const fs = require('fs');
 // @access  Private
 const getSubmissions = async (req, res) => {
   try {
-    const { taskId, studentId } = req.query;
-
+    const { taskId } = req.query;
     let query = {};
-    if (taskId) query.taskId = taskId;
-    if (studentId) query.studentId = studentId;
 
-    // If student, force only their submissions unless instructor
+    // Ensure taskId is filtered if provided by the dashboard
+    if (taskId) query.taskId = taskId;
+
+    // Students only see their own work; Instructors see everyone's
     if (req.user.role === 'STUDENT') {
         query.studentId = req.user.id;
     }
 
-    const submissions = await Submission.find(query).sort({ submittedAt: -1 });
+    // IMPORTANT: .populate links the studentId to the actual User data
+    const submissions = await Submission.find(query)
+        .populate('studentId', 'name email') 
+        .sort({ submittedAt: -1 });
     
     res.status(200).json({ success: true, data: submissions });
   } catch (error) {
-    console.error("[GetSubmissions] Error:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };

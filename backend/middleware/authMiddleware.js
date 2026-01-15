@@ -15,6 +15,10 @@ const protect = async (req, res, next) => {
 
       req.user = await User.findById(decoded.id).select('-password');
 
+      if (!req.user) {
+        return res.status(401).json({ message: 'Not authorized, user not found' });
+      }
+
       next();
     } catch (error) {
       console.error(error);
@@ -28,7 +32,7 @@ const protect = async (req, res, next) => {
 };
 
 const admin = (req, res, next) => {
-  if (req.user && req.user.role === 'ADMIN') {
+  if (req.user && req.user.role && req.user.role.toUpperCase() === 'ADMIN') {
     next();
   } else {
     res.status(401).json({ message: 'Not authorized as an admin' });
@@ -36,11 +40,21 @@ const admin = (req, res, next) => {
 };
 
 const instructor = (req, res, next) => {
-  if (req.user && (req.user.role === 'INSTRUCTOR' || req.user.role === 'ADMIN')) {
-    next();
+  // Debug Log (To be removed later)
+  if (req.user) {
+      console.log('ROLE:', req.user.role);
   } else {
-    res.status(401).json({ message: 'Not authorized as an instructor' });
+      console.log('ROLE: req.user is undefined');
   }
+
+  if (req.user && req.user.role) {
+    const role = req.user.role.trim().toUpperCase();
+    if (role === 'INSTRUCTOR' || role === 'ADMIN') {
+        return next();
+    }
+  }
+  
+  res.status(401).json({ message: 'Not authorized as an instructor' });
 };
 
 module.exports = { protect, admin, instructor };

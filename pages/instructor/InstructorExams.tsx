@@ -42,6 +42,7 @@ export const InstructorExams: React.FC<{ user: User }> = ({ user }) => {
   const [newQText, setNewQText] = useState('');
   const [newQType, setNewQType] = useState<ExamType>(ExamType.MCQ);
   const [newQLang, setNewQLang] = useState('javascript');
+  const [isPublishing, setIsPublishing] = useState(false);
   
   // MCQ Specific State
   const [mcqOptions, setMcqOptions] = useState<string[]>(['', '', '', '']);
@@ -196,20 +197,30 @@ export const InstructorExams: React.FC<{ user: User }> = ({ user }) => {
         return;
     }
 
-    await api.createExam({
-      title,
-      description: 'Instructor created exam',
-      startTime: new Date().toISOString(),
-      endTime: new Date(Date.now() + 86400000).toISOString(),
-      durationMinutes: 60,
-      questions,
-      createdBy: user.id,
-      category: examCategoryFilter, // Use the selected filter as category
-      status: 'PUBLISHED'
-    });
-    setViewState('LIST');
-    setTitle('');
-    setQuestions([]);
+    setIsPublishing(true);
+    try {
+        await api.createExam({
+          title,
+          description: 'Instructor created exam',
+          startTime: new Date().toISOString(),
+          endTime: new Date(Date.now() + 86400000).toISOString(),
+          durationMinutes: 60,
+          questions,
+          createdBy: user.id,
+          category: examCategoryFilter, // Use the selected filter as category
+          status: 'PUBLISHED'
+        });
+        
+        setViewState('LIST');
+        setTitle('');
+        setQuestions([]);
+        alert("Exam published successfully!");
+    } catch (e: any) {
+        console.error("Failed to create exam:", e);
+        alert(e.message || "Failed to publish exam. Please check your connection and try again.");
+    } finally {
+        setIsPublishing(false);
+    }
   };
 
   const handleGenerateQuestions = async () => {
@@ -727,8 +738,12 @@ export const InstructorExams: React.FC<{ user: User }> = ({ user }) => {
 
            <div className="flex justify-end gap-3 pt-4 border-t border-white/10">
               <button onClick={() => setViewState('LIST')} className="px-6 py-3 text-gray-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors font-medium">Cancel</button>
-              <button onClick={handleCreate} className="bg-teal-600 text-white px-8 py-3 rounded-xl hover:bg-teal-500 shadow-lg shadow-teal-500/20 font-bold transition-all transform hover:-translate-y-0.5">
-                Publish Exam
+              <button 
+                onClick={handleCreate} 
+                disabled={isPublishing}
+                className={`bg-teal-600 text-white px-8 py-3 rounded-xl hover:bg-teal-500 shadow-lg shadow-teal-500/20 font-bold transition-all transform hover:-translate-y-0.5 ${isPublishing ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                {isPublishing ? 'Publishing...' : 'Publish Exam'}
               </button>
            </div>
         </div>
