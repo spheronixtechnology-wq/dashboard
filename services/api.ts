@@ -47,7 +47,7 @@ class ApiClient {
         const text = await res.text().catch(() => '');
         const cleanText = String(text).replace(/\s+/g, ' ').trim();
         const snippet = cleanText ? cleanText.slice(0, 200) : '';
-        const fallback = `Request failed: ${res.status} ${res.statusText}. Is the backend running on http://127.0.0.1:5001?`;
+        const fallback = `Request failed: ${res.status} ${res.statusText}`;
 
         throw new Error(snippet || fallback);
       }
