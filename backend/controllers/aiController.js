@@ -1,4 +1,4 @@
-const { GoogleGenAI, Type } = require("@google/genai");
+import { GoogleGenAI, Type } from "@google/genai";
 
 // @desc    Generate questions using AI
 // @route   POST /api/generate-questions
@@ -65,4 +65,4 @@ const generateQuestions = async (req, res) => {
   }
 };
 
-module.exports = { generateQuestions };
+export { generateQuestions };

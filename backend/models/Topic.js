@@ -1,6 +1,6 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
-const topicSchema = mongoose.Schema(
+const topicSchema = new mongoose.Schema(
   {
     title: { type: String, required: true },
     content: { type: String, required: true },
@@ -17,4 +17,5 @@ topicSchema.index({ isPublished: 1, publishDate: -1 });
 topicSchema.virtual('id').get(function(){ return this._id.toHexString(); });
 topicSchema.set('toJSON', { virtuals: true, transform: function (doc, ret) { delete ret._id; delete ret.__v; } });
 
-module.exports = mongoose.model('Topic', topicSchema);
+const Topic = mongoose.model('Topic', topicSchema);
+export default Topic;

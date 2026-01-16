@@ -1,7 +1,10 @@
-const Submission = require('../models/Submission');
-const User = require('../models/User');
-const path = require('path');
-const fs = require('fs');
+import Submission from '../models/Submission.js';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // @desc    Get submissions
 // @route   GET /api/submissions
@@ -174,19 +177,17 @@ const downloadSubmission = async (req, res) => {
         console.log(`[Download] Request for submission ${submission.id}`);
 
         if (submission.fileUrl) {
-             // Correct path resolution relative to this controller file
-             // Controller is in /backend/controllers
-             // Uploads are in /backend/uploads
-             const filePath = path.join(__dirname, '..', 'uploads', submission.fileUrl);
-             console.log(`[Download] Checking local file: ${filePath}`);
+             const absoluteFilePath = path.join(process.cwd(), 'uploads', submission.fileUrl);
 
-             if (fs.existsSync(filePath)) {
+             console.log(`[Download] Checking local file: ${absoluteFilePath}`);
+
+             if (fs.existsSync(absoluteFilePath)) {
                  const filename = submission.originalFileName || path.basename(submission.fileUrl);
                  
                  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
                  res.setHeader('Content-Type', submission.fileType || 'application/octet-stream');
                  
-                 res.download(filePath, filename, (err) => {
+                 res.download(absoluteFilePath, filename, (err) => {
                      if (err) {
                          console.error("[Download] Send File Error:", err);
                          if (!res.headersSent) res.status(500).send("Could not download file");
@@ -204,7 +205,7 @@ const downloadSubmission = async (req, res) => {
     }
 };
 
-module.exports = {
+export {
   getSubmissions,
   createSubmission,
   gradeSubmission,

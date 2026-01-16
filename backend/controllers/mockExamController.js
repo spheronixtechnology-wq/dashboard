@@ -1,4 +1,4 @@
-const MockExam = require('../models/MockExam');
+import MockExam from '../models/MockExam.js';
 
 // @desc    Get all mock exams
 // @route   GET /api/mock-exams
@@ -79,7 +79,7 @@ const deleteMockExam = async (req, res) => {
   }
 };
 
-module.exports = {
+export {
   getMockExams,
   createMockExam,
   updateMockExam,

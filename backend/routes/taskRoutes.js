@@ -1,8 +1,9 @@
-const express = require('express');
+import express from 'express';
+import { getTasks, createTask } from '../controllers/taskController.js';
+import { protect, instructor } from '../middleware/authMiddleware.js';
+
 const router = express.Router();
-const { getTasks, createTask } = require('../controllers/taskController');
-const { protect, instructor } = require('../middleware/authMiddleware');
 
 router.route('/').get(protect, getTasks).post(protect, instructor, createTask);
 
-module.exports = router;
+export default router;

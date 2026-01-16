@@ -1,7 +1,11 @@
-const Research = require('../models/Research');
-const mongoose = require('mongoose');
-const fs = require('fs');
-const path = require('path');
+import Research from '../models/Research.js';
+import mongoose from 'mongoose';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // @desc    Get research submissions
 // @route   GET /api/research
@@ -49,7 +53,8 @@ const createResearch = async (req, res) => {
             const bucket = new mongoose.mongo.GridFSBucket(mongoose.connection.db, {
                 bucketName: 'uploads'
             });
-            const filePath = path.join(__dirname, '..', 'uploads', req.file.filename);
+            // Assuming uploads are in process.cwd()/uploads
+            const filePath = path.join(process.cwd(), 'uploads', req.file.filename);
             
             console.log(`[Research] Streaming ${filePath} to GridFS...`);
             
@@ -165,7 +170,7 @@ const downloadResearch = async (req, res) => {
             return res.redirect(fileUrl);
         }
 
-        const filePath = path.resolve(__dirname, '../../', fileUrl); // Adjust path as needed
+        const filePath = path.join(process.cwd(), 'uploads', fileUrl); // Adjust path as needed
         if (fs.existsSync(filePath)) {
             return res.download(filePath);
         }
@@ -177,7 +182,7 @@ const downloadResearch = async (req, res) => {
     }
 };
 
-module.exports = {
+export {
   getResearch,
   createResearch,
   reviewResearch,

@@ -1,9 +1,10 @@
-const express = require('express');
-const router = express.Router();
-const { getAttendance, heartbeat } = require('../controllers/attendanceController');
-const { protect } = require('../middleware/authMiddleware');
+import express from 'express';
+import { getAttendance, heartbeat } from '../controllers/attendanceController.js';
+import { protect, student } from '../middleware/authMiddleware.js';
 
-router.post('/heartbeat', protect, heartbeat);
+const router = express.Router();
+
+router.post('/heartbeat', protect, student, heartbeat);
 router.get('/:userId', protect, getAttendance);
 
-module.exports = router;
+export default router;

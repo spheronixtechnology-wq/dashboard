@@ -1,5 +1,5 @@
-const multer = require('multer');
-const path = require('path');
+import multer from 'multer';
+import path from 'path';
 
 // Use Disk Storage temporarily to handle the file, then move to GridFS in controller
 // This avoids compatibility issues with multer-gridfs-storage and Mongoose 8
@@ -34,4 +34,4 @@ const upload = multer({
   },
 });
 
-module.exports = upload;
+export default upload;

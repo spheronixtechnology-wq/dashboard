@@ -33,6 +33,8 @@ export const InstructorExams: React.FC<{ user: User }> = ({ user }) => {
   const [aiTopic, setAiTopic] = useState('');
   const [aiCount, setAiCount] = useState(5);
   const [aiDifficulty, setAiDifficulty] = useState('Intermediate');
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [aiChecked, setAiChecked] = useState(false);
 
   // Manual Creation State
   const [title, setTitle] = useState('');
@@ -81,6 +83,19 @@ export const InstructorExams: React.FC<{ user: User }> = ({ user }) => {
       fetchMockExams();
     }
   }, [viewState]);
+
+  useEffect(() => {
+    api.getHealth()
+      .then((health) => {
+        setAiEnabled(Boolean(health?.aiEnabled));
+      })
+      .catch(() => {
+        setAiEnabled(false);
+      })
+      .finally(() => {
+        setAiChecked(true);
+      });
+  }, []);
 
   const handleRefresh = () => {
       if (viewState === 'MOCK_EXAMS') fetchMockExams();
@@ -598,11 +613,22 @@ export const InstructorExams: React.FC<{ user: User }> = ({ user }) => {
                  <h3 className="font-semibold text-gray-300">Question Builder</h3>
                  <button 
                    onClick={() => setShowAIModal(true)}
-                   className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg shadow-purple-500/20 hover:shadow-purple-500/40 transition-all"
+                   disabled={!aiEnabled}
+                   title={!aiEnabled ? 'AI generation is not configured on this server.' : ''}
+                   className={`flex items-center gap-2 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg transition-all ${
+                     aiEnabled
+                       ? 'bg-gradient-to-r from-purple-600 to-pink-600 shadow-purple-500/20 hover:shadow-purple-500/40'
+                       : 'bg-white/10 text-gray-400 cursor-not-allowed border border-white/10 shadow-none'
+                   }`}
                  >
                    <Sparkles className="w-4 h-4" /> Generate with AI
                  </button>
               </div>
+              {aiChecked && !aiEnabled && (
+                <div className="text-xs text-gray-500">
+                  AI question generation is disabled (missing server key).
+                </div>
+              )}
 
               {/* Question Editor */}
               <div className="flex flex-col gap-4 p-6 bg-white/5 rounded-xl border border-white/5 relative overflow-hidden">

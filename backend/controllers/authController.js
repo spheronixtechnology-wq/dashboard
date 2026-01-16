@@ -1,9 +1,9 @@
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs');
-const User = require('../models/User');
-const Attendance = require('../models/Attendance');
-const PendingUser = require('../models/PendingUser');
-const sendEmail = require('../utils/sendEmail');
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
+import User from '../models/User.js';
+import Attendance from '../models/Attendance.js';
+import PendingUser from '../models/PendingUser.js';
+import sendEmail from '../utils/sendEmail.js';
 
 // Generate JWT
 const generateToken = (id) => {
@@ -18,6 +18,7 @@ const generateToken = (id) => {
 const registerUser = async (req, res) => {
   try {
     let { name, username, email, password, role } = req.body;
+
 
     // Normalize inputs
     if (email) email = email.toLowerCase().trim();
@@ -47,12 +48,14 @@ const registerUser = async (req, res) => {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
+    const hashedPassword = await bcrypt.hash(password, 10);
+
     // 4. Create fresh PendingUser
-    await PendingUser.create({
+    const pendingUser = await PendingUser.create({
       name,
       username,
       email,
-      password, // Plain text, will be hashed when moved to User model
+      password: hashedPassword,
       role: role || 'STUDENT',
       otp,
       otpExpiry
@@ -94,8 +97,9 @@ Spheronix Technology
       });
     } catch (error) {
       console.error("Email send error:", error);
-      // In development, we might have fallen back to logging the OTP, so we don't necessarily want to fail here if sendEmail handled it.
-      // But if sendEmail throws, we return 500.
+      if (pendingUser?._id) {
+        await PendingUser.deleteOne({ _id: pendingUser._id });
+      }
       return res.status(500).json({ success: false, message: 'Could not send verification email. Please try again.' });
     }
 
@@ -109,7 +113,8 @@ Spheronix Technology
 // @route   POST /api/auth/verify-signup
 // @access  Public
 const verifySignup = async (req, res) => {
-    const { email, code } = req.body;
+    let { email, code } = req.body;
+    if (email) email = email.toLowerCase().trim();
 
     try {
         const pendingUser = await PendingUser.findOne({ 
@@ -159,65 +164,83 @@ const verifySignup = async (req, res) => {
 // @route   POST /api/auth/login
 // @access  Public
 const loginUser = async (req, res) => {
-  let { email, password, role } = req.body;
+  try {
+    let { email, password, role } = req.body || {};
 
-  // Normalize email
-  if (email) email = email.toLowerCase().trim();
+    if (typeof email !== 'string' || typeof password !== 'string') {
+      return res.status(400).json({ success: false, message: 'Email and password are required' });
+    }
 
-  // Check for user email
+    email = email.toLowerCase().trim();
+
     const user = await User.findOne({ email });
 
-    if (user) {
-        // Check password
-        const isMatch = await user.matchPassword(password);
-
-        if (isMatch) {
-        // Strict Role Check (Case Insensitive)
-        if (role && user.role.toUpperCase() !== role.toUpperCase()) {
-            return res.status(401).json({ success: false, message: `Access denied. This account is registered as ${user.role}.` });
-        }
-
-        // Record Attendance if student
-        if (user.role === 'STUDENT') {
-            const today = new Date().toISOString().split('T')[0];
-            const existingAttendance = await Attendance.findOne({ 
-                studentId: user._id, 
-                date: today 
-            });
-
-            const now = new Date();
-
-            if (!existingAttendance) {
-                await Attendance.create({
-                    studentId: user._id,
-                    date: today,
-                    loginTime: now,
-                    lastActiveTime: now,
-                    totalActiveMinutes: 0
-                });
-            } else {
-                // If logging in again today, update lastActiveTime
-                existingAttendance.lastActiveTime = now;
-                await existingAttendance.save();
-            }
-        }
-
-        const token = generateToken(user._id);
-
-        return res.json({ 
-            success: true, 
-            data: {
-                id: user.id,
-                name: user.name,
-                email: user.email,
-                role: user.role,
-                token: token,
-            }
-        });
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
-  }
 
-  res.status(401).json({ success: false, message: 'Invalid credentials' });
+    const isMatch = await user.matchPassword(password);
+
+    if (!isMatch) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    }
+
+    if (typeof role === 'string' && role && user.role.toUpperCase() !== role.toUpperCase()) {
+      return res
+        .status(401)
+        .json({ success: false, message: `Access denied. This account is registered as ${user.role}.` });
+    }
+
+    if (user.role === 'STUDENT') {
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        const now = new Date();
+
+        const existingAttendance = await Attendance.findOne({
+          studentId: user._id,
+          date: today,
+        });
+
+        if (!existingAttendance) {
+          await Attendance.create({
+            studentId: user._id,
+            date: today,
+            loginTime: now,
+            lastActiveTime: now,
+            totalActiveMinutes: 0,
+          });
+        } else {
+          existingAttendance.lastActiveTime = now;
+          await existingAttendance.save();
+        }
+      } catch (attendanceError) {
+        console.error('[AUTH] attendance record failed:', attendanceError?.message || attendanceError);
+      }
+    }
+
+    const token = generateToken(user._id);
+
+    return res.json({
+      success: true,
+      data: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        token,
+      },
+    });
+  } catch (error) {
+    console.error('[AUTH] login error:', error?.message || error);
+    const origin = typeof req.headers?.origin === 'string' ? req.headers.origin : '';
+    const host = typeof req.headers?.host === 'string' ? req.headers.host : '';
+    const isLocal = /localhost|127\.0\.0\.1/i.test(origin) || /localhost|127\.0\.0\.1/i.test(host);
+    const message =
+      isLocal && (error?.message || error)
+        ? String(error?.message || error).slice(0, 300)
+        : 'Login failed. Please try again.';
+    return res.status(500).json({ success: false, message });
+  }
 };
 
 // @desc    Get user data
@@ -254,7 +277,11 @@ const forgotPassword = async (req, res) => {
   if (email) email = email.toLowerCase().trim();
 
   try {
-    const user = await User.findOne({ email });
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({ success: false, message: 'Email is required' });
+    }
+
+    const user = await User.findOne({ email }).select('_id email');
 
     if (!user) {
       // Security: Do not reveal if email exists
@@ -265,9 +292,10 @@ const forgotPassword = async (req, res) => {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const expiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-    user.resetOTP = otp;
-    user.otpExpiry = expiry;
-    await user.save();
+    await User.updateOne(
+      { _id: user._id },
+      { $set: { resetOTP: otp, otpExpiry: expiry } }
+    );
 
     // Send Email
     const message = `
@@ -303,13 +331,15 @@ support@spheronixtechnology.com
 
         res.status(200).json({ success: true, message: 'If the email exists, a code has been sent.' });
     } catch (error) {
-        user.resetOTP = undefined;
-        user.otpExpiry = undefined;
-        await user.save();
+        await User.updateOne(
+          { _id: user._id },
+          { $unset: { resetOTP: '', otpExpiry: '' } }
+        );
         console.error("Email send error:", error);
         return res.status(500).json({ success: false, message: 'Email could not be sent' });
     }
   } catch (error) {
+    console.error('[AUTH] forgotPassword error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
@@ -318,7 +348,8 @@ support@spheronixtechnology.com
 // @route   POST /api/auth/verify-reset-code
 // @access  Public
 const verifyResetCode = async (req, res) => {
-  const { email, code } = req.body;
+  let { email, code } = req.body;
+  if (email) email = email.toLowerCase().trim();
 
   try {
     const user = await User.findOne({ 
@@ -408,7 +439,7 @@ const changePassword = async (req, res) => {
   }
 };
 
-module.exports = {
+export {
   registerUser,
   verifySignup,
   loginUser,
@@ -417,5 +448,5 @@ module.exports = {
   forgotPassword,
   verifyResetCode,
   resetPassword,
-  changePassword // Added changePassword
+  changePassword
 };

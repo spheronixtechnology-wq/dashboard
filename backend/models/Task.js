@@ -1,6 +1,6 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
-const taskSchema = mongoose.Schema(
+const taskSchema = new mongoose.Schema(
   {
     title: { type: String, required: true },
     description: { type: String, required: true },
@@ -20,4 +20,5 @@ taskSchema.index({ type: 1, createdAt: -1 });
 taskSchema.virtual('id').get(function(){ return this._id.toHexString(); });
 taskSchema.set('toJSON', { virtuals: true, transform: function (doc, ret) { delete ret._id; delete ret.__v; } });
 
-module.exports = mongoose.model('Task', taskSchema);
+const Task = mongoose.model('Task', taskSchema);
+export default Task;

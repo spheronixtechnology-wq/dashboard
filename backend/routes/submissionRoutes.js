@@ -1,12 +1,13 @@
-const express = require('express');
+import express from 'express';
+import { getSubmissions, createSubmission, gradeSubmission, downloadSubmission } from '../controllers/submissionController.js';
+import { protect, instructor, student } from '../middleware/authMiddleware.js';
+import upload from '../middleware/uploadMiddleware.js';
+
 const router = express.Router();
-const { getSubmissions, createSubmission, gradeSubmission, downloadSubmission } = require('../controllers/submissionController');
-const { protect, instructor } = require('../middleware/authMiddleware');
-const upload = require('../middleware/uploadMiddleware');
 
 router.route('/')
     .get(protect, getSubmissions)
-    .post(protect, upload.single('file'), createSubmission);
+    .post(protect, student, upload.single('file'), createSubmission);
 
 router.route('/:id/grade')
     .put(protect, instructor, gradeSubmission);
@@ -14,4 +15,4 @@ router.route('/:id/grade')
 router.route('/:id/download')
     .get(protect, instructor, downloadSubmission);
 
-module.exports = router;
+export default router;

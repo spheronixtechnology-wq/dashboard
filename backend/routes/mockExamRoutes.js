@@ -1,7 +1,8 @@
-const express = require('express');
+import express from 'express';
+import { getMockExams, createMockExam, updateMockExam, deleteMockExam } from '../controllers/mockExamController.js';
+import { protect, instructor } from '../middleware/authMiddleware.js';
+
 const router = express.Router();
-const { getMockExams, createMockExam, updateMockExam, deleteMockExam } = require('../controllers/mockExamController');
-const { protect, instructor } = require('../middleware/authMiddleware');
 
 router.route('/')
     .get(protect, getMockExams)
@@ -11,4 +12,4 @@ router.route('/:id')
     .put(protect, instructor, updateMockExam)
     .delete(protect, instructor, deleteMockExam);
 
-module.exports = router;
+export default router;

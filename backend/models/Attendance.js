@@ -1,6 +1,6 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
-const attendanceSchema = mongoose.Schema(
+const attendanceSchema = new mongoose.Schema(
   {
     studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     date: { type: String, required: true }, // YYYY-MM-DD
@@ -18,4 +18,5 @@ attendanceSchema.index({ studentId: 1, date: 1 }, { unique: true });
 attendanceSchema.virtual('id').get(function(){ return this._id.toHexString(); });
 attendanceSchema.set('toJSON', { virtuals: true, transform: function (doc, ret) { delete ret._id; delete ret.__v; } });
 
-module.exports = mongoose.model('Attendance', attendanceSchema);
+const Attendance = mongoose.model('Attendance', attendanceSchema);
+export default Attendance;

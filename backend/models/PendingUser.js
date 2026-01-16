@@ -1,6 +1,6 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
-const pendingUserSchema = mongoose.Schema(
+const pendingUserSchema = new mongoose.Schema(
   {
     name: { type: String, required: true },
     username: { type: String, required: true },
@@ -18,4 +18,5 @@ const pendingUserSchema = mongoose.Schema(
 // Auto-delete pending users after 1 hour to keep DB clean
 pendingUserSchema.index({ createdAt: 1 }, { expireAfterSeconds: 3600 });
 
-module.exports = mongoose.model('PendingUser', pendingUserSchema);
+const PendingUser = mongoose.model('PendingUser', pendingUserSchema);
+export default PendingUser;

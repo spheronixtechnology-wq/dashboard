@@ -1,4 +1,4 @@
-const Topic = require('../models/Topic');
+import Topic from '../models/Topic.js';
 
 // @desc    Get all topics
 // @route   GET /api/topics
@@ -34,7 +34,7 @@ const createTopic = async (req, res) => {
   }
 };
 
-module.exports = {
+export {
   getTopics,
   createTopic,
 };

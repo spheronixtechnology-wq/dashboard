@@ -1,4 +1,4 @@
-const Task = require('../models/Task');
+import Task from '../models/Task.js';
 
 // @desc    Get all tasks
 // @route   GET /api/tasks
@@ -34,7 +34,7 @@ const createTask = async (req, res) => {
   }
 };
 
-module.exports = {
+export {
   getTasks,
   createTask,
 };

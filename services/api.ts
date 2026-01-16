@@ -9,9 +9,6 @@ class ApiClient {
   
   private async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
     const token = localStorage.getItem('token');
-    
-    // Debug Log
-    console.log('TOKEN:', token);
 
     const headers: HeadersInit = { 
         'Content-Type': 'application/json' 
@@ -28,17 +25,31 @@ class ApiClient {
       });
       
       if (!res.ok) {
-        const error = await res.json().catch(() => ({}));
+        const errorJson = await res.clone().json().catch(() => null as any);
+        const errorMessage =
+          errorJson && typeof errorJson === 'object' && 'message' in errorJson ? (errorJson as any).message : '';
         
         // Handle 401 User Not Found (Stale Token)
-        if (res.status === 401 && (error.message === 'Not authorized, user not found' || error.message === 'Not authorized, token failed')) {
+        if (
+          res.status === 401 &&
+          (errorMessage === 'Not authorized, user not found' || errorMessage === 'Not authorized, token failed')
+        ) {
             console.warn("Session expired or user not found. Redirecting to login.");
             localStorage.removeItem('token');
             window.location.href = '/#/login'; // Force redirect
             throw new Error("Session expired. Please login again.");
         }
 
-        throw new Error(error.message || `Request failed: ${res.statusText}`);
+        if (typeof errorMessage === 'string' && errorMessage.trim()) {
+          throw new Error(errorMessage.trim());
+        }
+
+        const text = await res.text().catch(() => '');
+        const cleanText = String(text).replace(/\s+/g, ' ').trim();
+        const snippet = cleanText ? cleanText.slice(0, 200) : '';
+        const fallback = `Request failed: ${res.status} ${res.statusText}. Is the backend running on http://127.0.0.1:5001?`;
+
+        throw new Error(snippet || fallback);
       }
       
       const json = await res.json();
@@ -76,6 +87,14 @@ class ApiClient {
     } catch (e) {
       throw e; // Throw error to be caught by UI
     }
+  }
+
+  async getProfile(): Promise<User> {
+    return this.request<User>('/auth/profile');
+  }
+
+  async getHealth(): Promise<{ success: boolean; service: string; db: string; aiEnabled: boolean }> {
+    return this.request<{ success: boolean; service: string; db: string; aiEnabled: boolean }>('/health');
   }
 
   async signup(user: Omit<User, 'id'>, password: string): Promise<User | { requiresVerification: boolean, email: string }> {

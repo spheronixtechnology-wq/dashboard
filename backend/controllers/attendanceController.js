@@ -1,4 +1,4 @@
-const Attendance = require('../models/Attendance');
+import Attendance from '../models/Attendance.js';
 
 // @desc    Get attendance history
 // @route   GET /api/attendance/:userId
@@ -65,16 +65,10 @@ const heartbeat = async (req, res) => {
             
             await attendance.save();
         } else if (diffMs > 30000) {
-            // Update lastActiveTime even if round(diff) was 0 (e.g. 40s), 
-            // but effectively we are discarding <30s increments if we don't accumulate.
-            // Better strategy: Don't update lastActiveTime if we didn't add minutes, 
-            // so the next heartbeat has a larger diffMs.
-            
+            // Update lastActiveTime even if round(diff) was 0 (e.g. 40s)
+            // But usually we don't save if no change in minutes to save writes
             // However, to keep "online" status accurate, we might want to update lastActiveTime.
-            // But for totalActiveMinutes tracking, we should wait.
-            // Let's NOT update lastActiveTime if we haven't added minutes, 
-            // UNLESS it's been a long time (e.g. user was idle but not enough to add minute?)
-            // Actually, simply relying on the next heartbeat to have a larger diffMs is best.
+            // But for this logic, we only care about minutes.
         }
 
         res.json({ success: true, data: attendance });
@@ -83,7 +77,7 @@ const heartbeat = async (req, res) => {
     }
 };
 
-module.exports = {
+export {
   getAttendance,
   heartbeat
 };

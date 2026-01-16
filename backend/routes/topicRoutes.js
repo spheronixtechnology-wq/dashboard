@@ -1,8 +1,9 @@
-const express = require('express');
+import express from 'express';
+import { getTopics, createTopic } from '../controllers/topicController.js';
+import { protect, instructor } from '../middleware/authMiddleware.js';
+
 const router = express.Router();
-const { getTopics, createTopic } = require('../controllers/topicController');
-const { protect, instructor } = require('../middleware/authMiddleware');
 
 router.route('/').get(protect, getTopics).post(protect, instructor, createTopic);
 
-module.exports = router;
+export default router;

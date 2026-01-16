@@ -1,12 +1,13 @@
-const express = require('express');
+import express from 'express';
+import { getResearch, createResearch, reviewResearch, downloadResearch } from '../controllers/researchController.js';
+import { protect, instructor, student } from '../middleware/authMiddleware.js';
+import upload from '../middleware/uploadMiddleware.js';
+
 const router = express.Router();
-const { getResearch, createResearch, reviewResearch, downloadResearch } = require('../controllers/researchController');
-const { protect, instructor } = require('../middleware/authMiddleware');
-const upload = require('../middleware/uploadMiddleware');
 
 router.route('/')
     .get(protect, getResearch)
-    .post(protect, upload.single('file'), createResearch);
+    .post(protect, student, upload.single('file'), createResearch);
 
 router.route('/:id/review')
     .put(protect, instructor, reviewResearch);
@@ -14,4 +15,4 @@ router.route('/:id/review')
 router.route('/:id/download')
     .get(protect, downloadResearch);
 
-module.exports = router;
+export default router;

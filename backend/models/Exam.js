@@ -1,6 +1,6 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
-const examSchema = mongoose.Schema(
+const examSchema = new mongoose.Schema(
   {
     title: { type: String, required: true },
     description: { type: String },
@@ -20,4 +20,5 @@ examSchema.index({ category: 1, status: 1, createdAt: -1 });
 examSchema.virtual('id').get(function(){ return this._id.toHexString(); });
 examSchema.set('toJSON', { virtuals: true, transform: function (doc, ret) { delete ret._id; delete ret.__v; } });
 
-module.exports = mongoose.model('Exam', examSchema);
+const Exam = mongoose.model('Exam', examSchema);
+export default Exam;

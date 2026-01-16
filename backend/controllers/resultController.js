@@ -1,5 +1,7 @@
-const Result = require('../models/Result');
-const Exam = require('../models/Exam');
+import Result from '../models/Result.js';
+import Exam from '../models/Exam.js';
+import Attendance from '../models/Attendance.js';
+import Submission from '../models/Submission.js';
 
 // @desc    Get exam submissions (Results)
 // @route   GET /api/exam-submissions
@@ -106,15 +108,19 @@ const submitExam = async (req, res) => {
 // @desc    Get student performance stats
 // @route   GET /api/student-performance/:studentId
 // @access  Private
-const Attendance = require('../models/Attendance');
-const Submission = require('../models/Submission');
-
-// @desc    Get student performance stats
-// @route   GET /api/student-performance/:studentId
-// @access  Private
 const getStudentPerformance = async (req, res) => {
     try {
         const { studentId } = req.params;
+
+        if (req.user?.role) {
+            const role = req.user.role.trim().toUpperCase();
+            if (role === 'STUDENT' && String(studentId) !== String(req.user.id)) {
+                return res.status(401).json({ success: false, message: 'Not authorized' });
+            }
+            if (role !== 'STUDENT' && role !== 'INSTRUCTOR' && role !== 'ADMIN') {
+                return res.status(401).json({ success: false, message: 'Not authorized' });
+            }
+        }
         
         // --- 1. Exams (30%) ---
         const examResults = await Result.find({ studentId });
@@ -279,7 +285,7 @@ const updateResult = async (req, res) => {
   }
 };
 
-module.exports = {
+export {
   getExamSubmissions,
   submitExam,
   getStudentPerformance,

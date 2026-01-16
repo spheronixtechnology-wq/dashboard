@@ -1,5 +1,5 @@
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+import jwt from 'jsonwebtoken';
+import User from '../models/User.js';
 
 const protect = async (req, res, next) => {
   let token;
@@ -19,15 +19,15 @@ const protect = async (req, res, next) => {
         return res.status(401).json({ message: 'Not authorized, user not found' });
       }
 
-      next();
+      return next();
     } catch (error) {
       console.error(error);
-      res.status(401).json({ message: 'Not authorized, token failed' });
+      return res.status(401).json({ message: 'Not authorized, token failed' });
     }
   }
 
   if (!token) {
-    res.status(401).json({ message: 'Not authorized, no token' });
+    return res.status(401).json({ message: 'Not authorized, no token' });
   }
 };
 
@@ -40,13 +40,6 @@ const admin = (req, res, next) => {
 };
 
 const instructor = (req, res, next) => {
-  // Debug Log (To be removed later)
-  if (req.user) {
-      console.log('ROLE:', req.user.role);
-  } else {
-      console.log('ROLE: req.user is undefined');
-  }
-
   if (req.user && req.user.role) {
     const role = req.user.role.trim().toUpperCase();
     if (role === 'INSTRUCTOR' || role === 'ADMIN') {
@@ -57,4 +50,15 @@ const instructor = (req, res, next) => {
   res.status(401).json({ message: 'Not authorized as an instructor' });
 };
 
-module.exports = { protect, admin, instructor };
+const student = (req, res, next) => {
+  if (req.user && req.user.role) {
+    const role = req.user.role.trim().toUpperCase();
+    if (role === 'STUDENT' || role === 'ADMIN') {
+      return next();
+    }
+  }
+
+  res.status(401).json({ message: 'Not authorized as a student' });
+};
+
+export { protect, admin, instructor, student };

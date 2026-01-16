@@ -1,7 +1,7 @@
-const Topic = require('../models/Topic');
-const Task = require('../models/Task');
-const Submission = require('../models/Submission');
-const Research = require('../models/Research');
+import Topic from '../models/Topic.js';
+import Task from '../models/Task.js';
+import Submission from '../models/Submission.js';
+import Research from '../models/Research.js';
 
 // @desc    Get dashboard stats
 // @route   GET /api/stats
@@ -29,4 +29,4 @@ const getStats = async (req, res) => {
   }
 };
 
-module.exports = { getStats };
+export { getStats };

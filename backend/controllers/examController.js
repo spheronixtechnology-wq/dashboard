@@ -1,5 +1,5 @@
-const Exam = require('../models/Exam');
-const Result = require('../models/Result');
+import Exam from '../models/Exam.js';
+import Result from '../models/Result.js';
 
 // @desc    Get all exams
 // @route   GET /api/exams
@@ -160,33 +160,63 @@ const submitExam = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Exam not found' });
     }
 
-    // 3. Simple Scoring Logic (Adjust based on your question structure)
-    let score = 0;
-    exam.questions.forEach((question, index) => {
-      if (answers[index] === question.correctAnswer) {
-        score += question.marks || 1;
+    const examQuestions = Array.isArray(exam.questions) ? exam.questions : [];
+    const hasDescriptive = examQuestions.some((q) => String(q?.type || '').toUpperCase() === 'DESCRIPTIVE');
+    const isGraded = !hasDescriptive;
+
+    const answersMap = (() => {
+      if (answers && typeof answers === 'object' && !Array.isArray(answers)) return answers;
+      if (Array.isArray(answers)) {
+        const map = {};
+        examQuestions.forEach((q, idx) => {
+          const key = q?.id ?? String(idx);
+          map[key] = answers[idx];
+        });
+        return map;
       }
-    });
+      return {};
+    })();
+
+    let score = 0;
+    for (const q of examQuestions) {
+      const qType = String(q?.type || '').toUpperCase();
+      const qId = q?.id;
+      const studentAns = qId !== undefined ? answersMap[qId] : undefined;
+      const maxMarks = Number(q?.maxMarks ?? q?.marks ?? 1) || 1;
+
+      if (qType === 'MCQ') {
+        const correct = q?.correctAnswer ? String(q.correctAnswer).trim() : '';
+        const student = studentAns ? String(studentAns).trim() : '';
+        if (correct && student && correct === student) score += maxMarks;
+      }
+
+      if (qType === 'CODING' && typeof studentAns === 'string') {
+        if (studentAns.length > 20 && !studentAns.includes('// Write your')) score += maxMarks;
+      }
+    }
 
     // 4. Create the Result
     const result = await Result.create({
       examId,
       studentId,
-      answers,
+      studentName: req.user.name,
+      answers: answersMap,
       score,
-      totalMarks: exam.totalMarks,
-      status: 'COMPLETED',
+      isGraded,
       submittedAt: Date.now()
     });
 
     res.status(201).json({ success: true, data: result });
   } catch (error) {
     console.error('[POST /exams/submit] Error:', error);
+    if (error?.code === 11000) {
+      return res.status(400).json({ success: false, message: 'Exam already submitted (Duplicate)' });
+    }
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-module.exports = {
+export {
   getExams,
   createExam,
   deleteExam,

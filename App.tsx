@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { User, UserRole } from './types';
 import { Layout } from './components/Layout';
@@ -29,8 +29,12 @@ import { api } from './services/api';
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [sessionStartTime, setSessionStartTime] = useState<string | null>(null);
+  const [isBootstrapping, setIsBootstrapping] = useState(true);
 
   const handleLogin = (loggedInUser: User) => {
+    if ((window as any).heartbeatInterval) {
+        clearInterval((window as any).heartbeatInterval);
+    }
     setUser(loggedInUser);
     setSessionStartTime(new Date().toISOString());
     // Start Heartbeat
@@ -49,9 +53,40 @@ const App: React.FC = () => {
     if ((window as any).heartbeatInterval) {
         clearInterval((window as any).heartbeatInterval);
     }
+    localStorage.removeItem('token');
     setUser(null);
     setSessionStartTime(null);
+    window.location.href = '/#/login';
   };
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setIsBootstrapping(false);
+      return;
+    }
+
+    api.getProfile()
+      .then((profile) => {
+        handleLogin(profile);
+        setIsBootstrapping(false);
+      })
+      .catch(() => {
+        localStorage.removeItem('token');
+        setUser(null);
+        setSessionStartTime(null);
+        setIsBootstrapping(false);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (isBootstrapping) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-white">
+        Loading...
+      </div>
+    );
+  }
 
   return (
     <HashRouter>

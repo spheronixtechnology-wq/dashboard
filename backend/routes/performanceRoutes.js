@@ -1,8 +1,9 @@
-const express = require('express');
+import express from 'express';
+import { getStudentPerformance } from '../controllers/resultController.js';
+import { protect } from '../middleware/authMiddleware.js';
+
 const router = express.Router();
-const { getStudentPerformance } = require('../controllers/resultController');
-const { protect } = require('../middleware/authMiddleware');
 
 router.get('/:studentId', protect, getStudentPerformance);
 
-module.exports = router;
+export default router;

@@ -1,6 +1,6 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
-const researchSchema = mongoose.Schema(
+const researchSchema = new mongoose.Schema(
   {
     studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     studentName: { type: String },
@@ -21,4 +21,5 @@ const researchSchema = mongoose.Schema(
 researchSchema.virtual('id').get(function(){ return this._id.toHexString(); });
 researchSchema.set('toJSON', { virtuals: true, transform: function (doc, ret) { delete ret._id; delete ret.__v; } });
 
-module.exports = mongoose.model('Research', researchSchema);
+const Research = mongoose.model('Research', researchSchema);
+export default Research;

@@ -1,6 +1,6 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
-const resultSchema = mongoose.Schema(
+const resultSchema = new mongoose.Schema(
   {
     examId: { type: mongoose.Schema.Types.ObjectId, ref: 'Exam', required: true },
     studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
@@ -19,4 +19,5 @@ resultSchema.index({ studentId: 1, submittedAt: -1 });
 resultSchema.virtual('id').get(function(){ return this._id.toHexString(); });
 resultSchema.set('toJSON', { virtuals: true, transform: function (doc, ret) { delete ret._id; delete ret.__v; } });
 
-module.exports = mongoose.model('Result', resultSchema);
+const Result = mongoose.model('Result', resultSchema);
+export default Result;

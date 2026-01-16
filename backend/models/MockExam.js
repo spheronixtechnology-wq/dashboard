@@ -1,6 +1,6 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
-const mockExamSchema = mongoose.Schema(
+const mockExamSchema = new mongoose.Schema(
   {
     studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     title: { type: String, required: true },
@@ -16,4 +16,5 @@ const mockExamSchema = mongoose.Schema(
 mockExamSchema.virtual('id').get(function(){ return this._id.toHexString(); });
 mockExamSchema.set('toJSON', { virtuals: true, transform: function (doc, ret) { delete ret._id; delete ret.__v; } });
 
-module.exports = mongoose.model('MockExam', mockExamSchema);
+const MockExam = mongoose.model('MockExam', mockExamSchema);
+export default MockExam;

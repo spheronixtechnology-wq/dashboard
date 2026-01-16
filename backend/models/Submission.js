@@ -1,6 +1,6 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
-const submissionSchema = mongoose.Schema(
+const submissionSchema = new mongoose.Schema(
   {
     taskId: { type: mongoose.Schema.Types.ObjectId, ref: 'Task', required: true },
     studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
@@ -29,4 +29,5 @@ submissionSchema.index({ studentId: 1, submittedAt: -1 });
 submissionSchema.virtual('id').get(function(){ return this._id.toHexString(); });
 submissionSchema.set('toJSON', { virtuals: true, transform: function (doc, ret) { delete ret._id; delete ret.__v; } });
 
-module.exports = mongoose.model('Submission', submissionSchema);
+const Submission = mongoose.model('Submission', submissionSchema);
+export default Submission;

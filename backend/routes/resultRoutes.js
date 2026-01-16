@@ -1,13 +1,14 @@
-const express = require('express');
+import express from 'express';
+import { getExamSubmissions, submitExam, updateResult } from '../controllers/resultController.js';
+import { protect, instructor, student } from '../middleware/authMiddleware.js';
+
 const router = express.Router();
-const { getExamSubmissions, submitExam, updateResult } = require('../controllers/resultController');
-const { protect, instructor } = require('../middleware/authMiddleware');
 
 router.route('/')
     .get(protect, getExamSubmissions)
-    .post(protect, submitExam);
+    .post(protect, student, submitExam);
 
 router.route('/:id')
     .put(protect, instructor, updateResult);
 
-module.exports = router;
+export default router;
